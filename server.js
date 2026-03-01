@@ -732,7 +732,6 @@ function detectAgentStateHeuristic(sessionName, sessionsCache) {
   if (lines.length === 0) return 'running';
 
   const recentText = lines.slice(-8).map(l => l.trim()).join('\n');
-  const latestText = lines.slice(-2).map(l => l.trim()).join('\n');
 
   const interactivePromptPatterns = [
     /enter to select/i,
@@ -744,7 +743,7 @@ function detectAgentStateHeuristic(sessionName, sessionsCache) {
   ];
 
   if (interactivePromptPatterns.some(p => p.test(recentText))) return 'idle';
-  if (/(?:esc|escape)\s+to\s+interrupt/i.test(latestText)) return 'running';
+  if (/(?:esc|escape)\s+to\s+interrupt/i.test(recentText)) return 'running';
 
   const uiNoise = [
     /bypass permissions/i,
