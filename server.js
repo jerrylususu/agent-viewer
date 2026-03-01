@@ -732,6 +732,7 @@ function detectAgentStateHeuristic(sessionName, sessionsCache) {
   if (lines.length === 0) return 'running';
 
   const recentText = lines.slice(-8).map(l => l.trim()).join('\n');
+  const latestText = lines.slice(-2).map(l => l.trim()).join('\n');
 
   const interactivePromptPatterns = [
     /enter to select/i,
@@ -743,14 +744,13 @@ function detectAgentStateHeuristic(sessionName, sessionsCache) {
   ];
 
   if (interactivePromptPatterns.some(p => p.test(recentText))) return 'idle';
-  if (/esc to interrupt/i.test(recentText)) return 'running';
+  if (/(?:esc|escape)\s+to\s+interrupt/i.test(latestText)) return 'running';
 
   const uiNoise = [
     /bypass permissions/i,
     /shift.?tab to cycle/i,
     /ctrl.?t to hide/i,
     /^[─━═]+$/,
-    /^❯\s*$/,
   ];
   const contentLines = lines.filter(l => !uiNoise.some(p => p.test(l.trim())));
   if (contentLines.length === 0) return 'running';
@@ -763,6 +763,8 @@ function detectAgentStateHeuristic(sessionName, sessionsCache) {
     /^\$\s*$/,
     /^❯\s*$/,
     /^❯\s+\S/,
+    /^›\s*$/,
+    /^›\s+\S/,
     /has completed/i,
     /what.*would.*like/i,
     /anything.*else/i,
@@ -771,6 +773,17 @@ function detectAgentStateHeuristic(sessionName, sessionsCache) {
   ];
 
   if (idlePatterns.some(p => p.test(lastLine))) return 'idle';
+
+  const recentPromptLines = contentLines.slice(-4).map(l => l.trim());
+  const promptLinePatterns = [
+    /^>\s*$/,
+    /^>\s+\S/,
+    /^❯\s*$/,
+    /^❯\s+\S/,
+    /^›\s*$/,
+    /^›\s+\S/,
+  ];
+  if (recentPromptLines.some(line => promptLinePatterns.some(p => p.test(line)))) return 'idle';
 
   const recentContent = contentLines.slice(-8).map(l => l.trim()).join('\n');
   const waitingForInputPatterns = [
