@@ -1,100 +1,70 @@
 # Agent Viewer
 
-A kanban board for managing multiple Claude Code agents running in tmux sessions. Spawn, monitor, and interact with agents from a single web UI.
+基于 tmux 的多 Agent 看板。你可以在一个 Web 页面里创建、观察、交互和清理多个 CLI Agent 会话。
 
-<img width="1466" height="725" alt="Screenshot 2026-02-09 at 14 54 21" src="https://github.com/user-attachments/assets/cd31b988-f649-4e92-9844-7a1ece9aa634" />
+## 主要能力
 
-Manage your agents from your mobile phone with Tailscale
+- 多 Agent Profile：不再绑定 Claude，可切换 `claude/codex/opencode` 或自定义可执行路径。
+- 自定义启动参数：支持附加参数、状态模式、状态文件路径。
+- 初始化 Prompt 组合：支持 `systemInitPrompt + runtimeInitPrompt + prompt`。
+- 状态多源判定：支持 `heuristic / file_sentinel / webhook / hybrid`。
+- 全 API 密码保护：前端本地保存密码，后端统一校验；SSE 也受保护。
+- 保留 tmux 可接管能力：随时 `tmux attach` 人工介入。
 
-![IMG_7782](https://github.com/user-attachments/assets/c7298d61-dd37-4d0f-8b0a-d9d1f0231782)
+## 运行要求
 
+- Node.js 18+
+- tmux
+- 至少一种 Agent CLI（如 `claude`、`codex`、`opencode`）
 
-## Prerequisites
-
-- [Node.js](https://nodejs.org/) (v18+)
-- [tmux](https://github.com/tmux/tmux)
-- [Claude CLI](https://docs.anthropic.com/en/docs/claude-code) (`claude` command available in your PATH)
-
-### Install prerequisites (macOS)
-
-```bash
-brew install node tmux
-npm install -g @anthropic-ai/claude-code
-```
-
-## Setup
+## 安装
 
 ```bash
-git clone <repo-url> && cd agent-viewer
 npm install
 ```
 
-## Usage
+## 启动
 
 ```bash
-npm start
+AGENT_VIEWER_PASSWORD='your-password' npm start
 ```
 
-Open http://localhost:4200 in your browser.
+可选环境变量：
 
-### Configuration
+- `HOST`：默认 `0.0.0.0`
+- `PORT`：默认 `4200`
+- `AGENT_VIEWER_PASSWORD`：API 访问密码（建议强制设置）
 
-| Variable | Default     | Description              |
-|----------|-------------|--------------------------|
-| `PORT`   | `4200`      | Server port              |
-| `HOST`   | `localhost`  | Bind address (`0.0.0.0` for network access) |
+## 配置文件
 
-Example:
+- Agent Profile: `config/agents.json`
+- 运行时 registry: `.agent-registry.json`
 
-```bash
-HOST=0.0.0.0 PORT=3000 npm start
-```
+详细说明见：
 
-## Remote Access via Tailscale
+- `docs/AGENT_PROFILE.md`
+- `docs/STATUS_HOOK.md`
+- `docs/SECURITY.md`
 
-You can access Agent Viewer from your phone (or any device) by using [Tailscale](https://tailscale.com/).
+## API 概览
 
-### 1. Install Tailscale on your Mac
+- `GET /api/agent-profiles`：读取可用 Agent Profile
+- `GET /api/agents`：查询全部 Agent
+- `POST /api/agents`：创建 Agent
+- `POST /api/agents/:name/send`：发送消息/重启后发送
+- `POST /api/agents/:name/status-callback`：外部回调状态
+- `GET /api/events`：SSE 实时更新
 
-```bash
-brew install tailscale
-```
+所有 `/api/*` 请求都必须提供密码：
 
-Or download from [tailscale.com/download](https://tailscale.com/download).
+- 普通请求：`X-Agent-Viewer-Password`
+- SSE：`/api/events?password=...`
 
-### 2. Install Tailscale on your phone
+## 本地测试建议
 
-Download the Tailscale app from the [App Store](https://apps.apple.com/app/tailscale/id1470499037) or [Google Play](https://play.google.com/store/apps/details?id=com.tailscale.ipn). Sign in with the same account.
+推荐使用本机安装的 `codex` 或 `opencode` 做冒烟测试：
 
-### 3. Start the server
-
-```bash
-npm start
-```
-
-The server binds to `0.0.0.0` by default, so it's already accessible on all network interfaces including Tailscale.
-
-### 4. Open on your phone
-
-Find your Mac's Tailscale IP (shown in the Tailscale app or via `tailscale ip`), then visit:
-
-```
-http://<tailscale-ip>:4200
-```
-
-If you have [MagicDNS](https://tailscale.com/kb/1081/magicdns) enabled, you can use your machine name instead:
-
-```
-http://<machine-name>:4200
-```
-
-## Features
-
-- **Spawn agents** — Click `[+ SPAWN]` or press `N`, enter a project path and prompt. Each agent launches in its own tmux session running `claude`.
-- **Kanban columns** — Agents are sorted into Running, Idle, and Completed columns based on their state.
-- **Auto-discovery** — Existing tmux sessions running Claude are automatically detected and added to the board.
-- **Live output** — Click `VIEW OUTPUT` to see the full terminal output with ANSI color rendering.
-- **Send messages** — Type in the prompt field on any card and press `Ctrl+Enter` to send follow-up messages to an agent.
-- **File uploads** — Drag and drop files onto a card or click `FILE` to send files to an agent.
-- **Re-spawn** — Completed agents can be re-spawned with a new prompt from the same project directory.
-- **Attach** — Click `ATTACH` to copy the `tmux attach` command for direct terminal access.
+1. 创建 Agent（可自定义二进制与参数）
+2. 发送消息并观察状态变化
+3. 测试状态回调接口与文件哨兵
+4. 测试密码错误时的 401 行为

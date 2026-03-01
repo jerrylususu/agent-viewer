@@ -108,6 +108,29 @@ header .status-bar .dot {
   color: var(--bg);
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  padding: 8px 10px;
+  font-family: var(--font);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.header-btn:hover {
+  border-color: var(--white);
+  color: var(--white);
+}
+
 /* ─── KANBAN BOARD ──────────────────────────────────────────────────── */
 .board {
   display: flex;
@@ -220,6 +243,7 @@ header .status-bar .dot {
 .card[data-state="running"] .card-titlebar { border-bottom-color: var(--green); }
 .card[data-state="idle"] .card-titlebar { border-bottom-color: var(--amber); }
 .card[data-state="completed"] .card-titlebar { border-bottom-color: var(--dim); }
+.card[data-state="failed"] .card-titlebar { border-bottom-color: var(--red); }
 
 .card-titlebar .state-badge {
   font-size: 10px;
@@ -230,6 +254,15 @@ header .status-bar .dot {
 .card[data-state="running"] .state-badge { color: var(--green); border: 1px solid var(--green); }
 .card[data-state="idle"] .state-badge { color: var(--amber); border: 1px solid var(--amber); }
 .card[data-state="completed"] .state-badge { color: var(--dim); border: 1px solid var(--dim); }
+.card[data-state="failed"] .state-badge { color: var(--red); border: 1px solid var(--red); }
+
+.card-titlebar .source-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  letter-spacing: 1px;
+  color: var(--white);
+  border: 1px solid var(--border);
+}
 
 .card-titlebar .prompt-badge {
   font-size: 10px;
@@ -593,6 +626,16 @@ header .status-bar .dot {
   color: var(--bg);
 }
 
+.field-hint {
+  margin-top: 4px;
+  color: var(--dim);
+  font-size: 10px;
+}
+
+.mini-input {
+  height: 34px !important;
+}
+
 /* ─── OUTPUT VIEWER OVERLAY ─────────────────────────────────────────── */
 .output-overlay {
   display: none;
@@ -759,6 +802,92 @@ header .status-bar .dot {
 .confirm-box .btn-no:hover {
   background: var(--white);
   color: var(--bg);
+}
+
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.88);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 4000;
+}
+
+.auth-overlay.active {
+  display: flex;
+}
+
+.auth-box {
+  width: 420px;
+  max-width: 95vw;
+  border: 2px solid var(--white);
+  background: var(--bg);
+  padding: 18px;
+}
+
+.auth-title {
+  font-size: 13px;
+  letter-spacing: 2px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.auth-desc {
+  margin-top: 8px;
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.auth-row {
+  display: flex;
+  margin-top: 14px;
+}
+
+.auth-row input {
+  flex: 1;
+  background: var(--input-bg);
+  border: 1px solid var(--border);
+  color: var(--white);
+  font-family: var(--font);
+  font-size: 12px;
+  padding: 8px 10px;
+  outline: none;
+}
+
+.auth-row input:focus {
+  border-color: var(--green);
+}
+
+.auth-actions {
+  margin-top: 14px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.auth-actions button {
+  background: none;
+  border: 1px solid var(--green);
+  color: var(--green);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 8px 16px;
+  letter-spacing: 1px;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.auth-actions button:hover {
+  background: var(--green);
+  color: var(--bg);
+}
+
+.auth-error {
+  margin-top: 8px;
+  color: var(--red);
+  font-size: 11px;
+  min-height: 16px;
 }
 
 /* ─── EMPTY STATE ───────────────────────────────────────────────────── */
@@ -1278,7 +1407,10 @@ header .status-bar .dot {
     <span class="dot"></span>
     <span id="connectionStatus">CONNECTING...</span>
   </div>
-  <button class="spawn-btn" onclick="openSpawnModal()">[+ SPAWN] <span style="color:var(--dim);font-size:10px;font-weight:400">(N)</span></button>
+  <div class="header-actions">
+    <button class="header-btn" onclick="openAuthModal(true)">PASSWORD</button>
+    <button class="spawn-btn" onclick="openSpawnModal()">[+ SPAWN] <span style="color:var(--dim);font-size:10px;font-weight:400">(N)</span></button>
+  </div>
 </header>
 
 <!-- ─── MOBILE TAB BAR ─────────────────────────────────────────────── -->
@@ -1364,6 +1496,61 @@ header .status-bar .dot {
           <textarea id="spawnPrompt" placeholder="Describe the task for the agent..."></textarea>
         </div>
       </div>
+      <div class="form-field">
+        <label>AGENT PROFILE</label>
+        <div class="input-row">
+          <span class="input-prefix">&gt;_</span>
+          <select id="spawnAgentId"></select>
+        </div>
+      </div>
+      <div class="form-field">
+        <label>CUSTOM BINARY PATH (OPTIONAL)</label>
+        <div class="input-row">
+          <span class="input-prefix">&gt;_</span>
+          <input type="text" id="spawnBinaryPath" placeholder="/usr/local/bin/codex" />
+        </div>
+      </div>
+      <div class="form-field">
+        <label>AGENT ARGS (ONE PER LINE)</label>
+        <div class="input-row" style="align-items:start">
+          <span class="input-prefix" style="padding-top:10px">&gt;_</span>
+          <textarea id="spawnArgs" placeholder="--sandbox&#10;workspace-write"></textarea>
+        </div>
+      </div>
+      <div class="form-field">
+        <label>STATUS MODE</label>
+        <div class="input-row">
+          <span class="input-prefix">&gt;_</span>
+          <select id="spawnStatusMode" class="mini-input">
+            <option value="heuristic">heuristic</option>
+            <option value="hybrid">hybrid</option>
+            <option value="file_sentinel">file_sentinel</option>
+            <option value="webhook">webhook</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-field">
+        <label>STATUS FILE PATH (OPTIONAL)</label>
+        <div class="input-row">
+          <span class="input-prefix">&gt;_</span>
+          <input type="text" id="spawnStatusFilePath" placeholder=".agent-status.json" />
+        </div>
+        <div class="field-hint">支持绝对路径或相对项目路径。</div>
+      </div>
+      <div class="form-field">
+        <label>SYSTEM INIT PROMPT (OPTIONAL)</label>
+        <div class="input-row" style="align-items:start">
+          <span class="input-prefix" style="padding-top:10px">&gt;_</span>
+          <textarea id="spawnSystemInitPrompt" placeholder="You are a careful coding agent..."></textarea>
+        </div>
+      </div>
+      <div class="form-field">
+        <label>RUNTIME INIT PROMPT (OPTIONAL)</label>
+        <div class="input-row" style="align-items:start">
+          <span class="input-prefix" style="padding-top:10px">&gt;_</span>
+          <textarea id="spawnRuntimeInitPrompt" placeholder="本次任务要求先写测试再实现。"></textarea>
+        </div>
+      </div>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeSpawnModal()">CANCEL</button>
@@ -1399,20 +1586,108 @@ header .status-bar .dot {
   </div>
 </div>
 
+<!-- ─── AUTH DIALOG ────────────────────────────────────────────────── -->
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-box">
+    <div class="auth-title">API PASSWORD</div>
+    <div class="auth-desc">输入后端访问密码。密码会保存在当前浏览器的 localStorage 中。</div>
+    <div class="auth-row">
+      <input type="password" id="authPasswordInput" placeholder="X-Agent-Viewer-Password" />
+    </div>
+    <div class="auth-error" id="authError"></div>
+    <div class="auth-actions">
+      <button onclick="savePasswordAndInit()">SAVE & CONNECT</button>
+    </div>
+  </div>
+</div>
+
 <script>
-// ─── STATE ─────────────────────────────────────────────────────────────
+const AUTH_KEY = 'agent_viewer_password';
+const sourceLabelMap = { TTY: 'SRC:TTY', FILE: 'SRC:FILE', HOOK: 'SRC:HOOK' };
+
 let agents = [];
+let agentProfiles = [];
+let profileMap = new Map();
+let recentProjects = [];
+let comboActiveIdx = -1;
+let viewerPassword = localStorage.getItem(AUTH_KEY) || '';
+
 let currentOutputAgent = null;
 let outputPollTimer = null;
 let pendingConfirm = null;
 let draggedAgentName = null;
-
-// ─── SSE CONNECTION ────────────────────────────────────────────────────
 let eventSource = null;
+let activeTab = 'running';
+
+function openAuthModal(forceReset = false) {
+  if (forceReset) {
+    viewerPassword = '';
+    localStorage.removeItem(AUTH_KEY);
+    if (eventSource) eventSource.close();
+  }
+  document.getElementById('authError').textContent = '';
+  const input = document.getElementById('authPasswordInput');
+  input.value = viewerPassword || '';
+  document.getElementById('authOverlay').classList.add('active');
+  setTimeout(() => input.focus(), 30);
+}
+
+function closeAuthModal() {
+  document.getElementById('authOverlay').classList.remove('active');
+}
+
+async function savePasswordAndInit() {
+  const input = document.getElementById('authPasswordInput');
+  const pw = input.value.trim();
+  if (!pw) {
+    document.getElementById('authError').textContent = '请输入密码。';
+    return;
+  }
+  viewerPassword = pw;
+  localStorage.setItem(AUTH_KEY, pw);
+  try {
+    await initializeApp();
+    closeAuthModal();
+  } catch (e) {
+    document.getElementById('authError').textContent = e.message || '连接失败';
+  }
+}
+
+function markDisconnected(text) {
+  document.getElementById('connectionStatus').textContent = text || 'DISCONNECTED';
+}
+
+function handleUnauthorized() {
+  markDisconnected('AUTH REQUIRED');
+  openAuthModal(false);
+}
+
+async function apiFetch(url, options = {}) {
+  const headers = new Headers(options.headers || {});
+  if (viewerPassword) headers.set('X-Agent-Viewer-Password', viewerPassword);
+  const res = await fetch(url, { ...options, headers });
+  if (res.status === 401) {
+    handleUnauthorized();
+    throw new Error('密码错误或未授权');
+  }
+  return res;
+}
+
+async function apiJson(url, options = {}) {
+  const res = await apiFetch(url, options);
+  const data = await res.json();
+  if (!res.ok || data.error) {
+    throw new Error(data.error || `请求失败: ${res.status}`);
+  }
+  return data;
+}
 
 function connectSSE() {
+  if (!viewerPassword) return;
   if (eventSource) eventSource.close();
-  eventSource = new EventSource('/api/events');
+
+  const url = `/api/events?password=${encodeURIComponent(viewerPassword)}`;
+  eventSource = new EventSource(url);
 
   eventSource.onmessage = (event) => {
     try {
@@ -1420,7 +1695,7 @@ function connectSSE() {
       if (data.type === 'connected') {
         document.getElementById('connectionStatus').textContent = 'CONNECTED';
       } else if (data.type === 'agents') {
-        agents = data.agents;
+        agents = Array.isArray(data.agents) ? data.agents : [];
         renderBoard();
       }
     } catch (e) {
@@ -1429,27 +1704,63 @@ function connectSSE() {
   };
 
   eventSource.onerror = () => {
-    document.getElementById('connectionStatus').textContent = 'RECONNECTING...';
-    setTimeout(connectSSE, 3000);
+    markDisconnected('RECONNECTING...');
+    setTimeout(() => {
+      if (viewerPassword) connectSSE();
+    }, 3000);
   };
 }
 
-// Also fetch immediately on load
+async function loadAgentProfiles() {
+  const data = await apiJson('/api/agent-profiles');
+  agentProfiles = Array.isArray(data) ? data : [];
+  profileMap = new Map(agentProfiles.map(p => [p.id, p]));
+  renderAgentProfileOptions();
+}
+
+function renderAgentProfileOptions() {
+  const select = document.getElementById('spawnAgentId');
+  if (!select) return;
+
+  if (!agentProfiles.length) {
+    select.innerHTML = '<option value="">(no profile)</option>';
+    return;
+  }
+
+  const html = agentProfiles.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.displayName || p.id)} (${escapeHtml(p.id)})</option>`).join('');
+  select.innerHTML = html;
+  select.value = agentProfiles[0].id;
+  applyProfileDefaults(agentProfiles[0].id);
+}
+
+function applyProfileDefaults(agentId) {
+  const profile = profileMap.get(agentId);
+  if (!profile) return;
+
+  const args = Array.isArray(profile.defaultArgs) ? profile.defaultArgs.join('\n') : '';
+  document.getElementById('spawnArgs').value = args;
+  document.getElementById('spawnSystemInitPrompt').value = profile.systemInitPrompt || '';
+  document.getElementById('spawnStatusMode').value = profile.status && profile.status.mode ? profile.status.mode : 'heuristic';
+  document.getElementById('spawnBinaryPath').value = '';
+}
+
 async function fetchAgents() {
+  agents = await apiJson('/api/agents');
+  renderBoard();
+}
+
+async function loadRecentProjects() {
   try {
-    const res = await fetch('/api/agents');
-    agents = await res.json();
-    renderBoard();
-  } catch (e) {
-    console.error('Fetch error:', e);
+    recentProjects = await apiJson('/api/recent-projects');
+  } catch {
+    recentProjects = [];
   }
 }
 
-// ─── RENDERING ─────────────────────────────────────────────────────────
 function renderBoard() {
   const running = agents.filter(a => a.state === 'running');
   const idle = agents.filter(a => a.state === 'idle');
-  const completed = agents.filter(a => a.state === 'completed');
+  const completed = agents.filter(a => a.state === 'completed' || a.state === 'failed');
 
   document.getElementById('runningCount').textContent = `[${running.length}]`;
   document.getElementById('idleCount').textContent = `[${idle.length}]`;
@@ -1459,34 +1770,27 @@ function renderBoard() {
   renderColumn('idleColumn', idle, 'NO IDLE AGENTS');
   renderColumn('completedColumn', completed, 'NO COMPLETED AGENTS');
 
-  // Show/hide clear all button
   document.getElementById('clearAllBtn').style.display = completed.length > 0 ? '' : 'none';
 
-  // Update mobile tab counts
   updateMobileTabs();
-
-  // Keep mobile column visibility in sync
   if (isMobile()) {
     document.querySelectorAll('.column').forEach(col => {
       col.classList.toggle('mobile-active', col.dataset.state === activeTab);
     });
   }
 
-  // Update output viewer if open
-  if (currentOutputAgent) {
-    updateOutputViewer();
-  }
+  if (currentOutputAgent) updateOutputViewer();
 }
 
 function renderColumn(columnId, columnAgents, emptyText) {
   const el = document.getElementById(columnId);
 
-  // Preserve focused textarea state before re-render
   const focused = el.querySelector('textarea:focus');
   let focusedId = null;
   let focusedValue = null;
   let focusedSelStart = null;
   let focusedSelEnd = null;
+
   if (focused) {
     focusedId = focused.id;
     focusedValue = focused.value;
@@ -1501,7 +1805,6 @@ function renderColumn(columnId, columnAgents, emptyText) {
 
   el.innerHTML = columnAgents.map(a => renderCard(a)).join('');
 
-  // Restore focused textarea state after re-render
   if (focusedId) {
     const restored = document.getElementById(focusedId);
     if (restored) {
@@ -1518,62 +1821,55 @@ function renderCard(agent) {
   const idleFor = agent.idleSince ? formatDuration(Date.now() - agent.idleSince) : '';
   const projectName = agent.projectPath ? agent.projectPath.split('/').filter(Boolean).pop() : '--';
   const lastActHtml = ansiToHtml(agent.lastActivity || '');
+  const statusSource = String(agent.statusSource || 'TTY').toUpperCase();
+  const sourceLabel = sourceLabelMap[statusSource] || `SRC:${statusSource}`;
 
   let metaLines = '';
   metaLines += `<div class="meta">PROJECT: <span>${escapeHtml(projectName)}</span></div>`;
+  metaLines += `<div class="meta">AGENT: <span>${escapeHtml(agent.agentId || '--')}</span></div>`;
   metaLines += `<div class="meta">UPTIME: <span>${uptime}</span></div>`;
 
   if (agent.state === 'idle') {
     metaLines += `<div class="meta">IDLE FOR: <span>${idleFor}</span></div>`;
-  } else if (agent.state === 'completed') {
-    const completedAgo = agent.completedAt ? formatDuration(Date.now() - agent.completedAt) + ' AGO' : '--';
-    metaLines += `<div class="meta">COMPLETED: <span>${completedAgo}</span></div>`;
+  } else if (agent.state === 'completed' || agent.state === 'failed') {
+    const completedAgo = agent.completedAt ? `${formatDuration(Date.now() - agent.completedAt)} AGO` : '--';
+    metaLines += `<div class="meta">${agent.state === 'failed' ? 'FAILED' : 'COMPLETED'}: <span>${completedAgo}</span></div>`;
   }
 
-  const activityBlock = lastActHtml
-    ? `<div class="activity">${lastActHtml}</div>`
-    : '';
-
-  // Interactive key controls for selection/permission prompts
-  // Use server-side detection, with client-side fallback from activity text
+  const activityBlock = lastActHtml ? `<div class="activity">${lastActHtml}</div>` : '';
   const promptType = agent.promptType || detectPromptTypeFromText(agent.lastActivity || '');
+
   let keyControlsBlock = '';
   if (promptType) {
     let buttons = '';
     const n = agent.name;
     if (promptType === 'select') {
-      buttons = `
-        <span class="kc-label">SELECT:</span>
+      buttons = `<span class="kc-label">SELECT:</span>
         <button onclick="sendKey('${n}', 'Up')" title="Move up">&#x2191;</button>
         <button onclick="sendKey('${n}', 'Down')" title="Move down">&#x2193;</button>
         <button onclick="sendKey('${n}', 'Enter')" title="Confirm selection">ENTER</button>
         <button onclick="sendKey('${n}', 'Escape')" title="Cancel">ESC</button>`;
     } else if (promptType === 'multiselect') {
-      buttons = `
-        <span class="kc-label">MULTI-SELECT:</span>
+      buttons = `<span class="kc-label">MULTI-SELECT:</span>
         <button onclick="sendKey('${n}', 'Up')" title="Move up">&#x2191;</button>
         <button onclick="sendKey('${n}', 'Down')" title="Move down">&#x2193;</button>
         <button onclick="sendKey('${n}', 'Space')" title="Toggle selection">SPACE</button>
         <button onclick="sendKey('${n}', 'Enter')" title="Confirm selections">ENTER</button>
         <button onclick="sendKey('${n}', 'Escape')" title="Cancel">ESC</button>`;
     } else if (promptType === 'permission') {
-      buttons = `
-        <span class="kc-label">PERMISSION:</span>
+      buttons = `<span class="kc-label">PERMISSION:</span>
         <button onclick="sendKey('${n}', 'Up')" title="Move up">&#x2191;</button>
         <button onclick="sendKey('${n}', 'Down')" title="Move down">&#x2193;</button>
         <button onclick="sendKey('${n}', 'Enter')" title="Confirm">ENTER</button>
         <button onclick="sendKey('${n}', 'Escape')" title="Cancel">ESC</button>`;
     } else if (promptType === 'plan') {
-      buttons = `
-        <span class="kc-label">PLAN:</span>
+      buttons = `<span class="kc-label">PLAN:</span>
         <button onclick="sendKey('${n}', 'Up')" title="Move up">&#x2191;</button>
         <button onclick="sendKey('${n}', 'Down')" title="Move down">&#x2193;</button>
         <button onclick="sendKey('${n}', 'Enter')" title="Confirm selection">ENTER</button>
-        <button onclick="sendKey('${n}', 'Escape')" title="Cancel">ESC</button>
-        <span style="color:var(--dim);font-size:10px;margin-left:4px">&middot; or type feedback below</span>`;
+        <button onclick="sendKey('${n}', 'Escape')" title="Cancel">ESC</button>`;
     } else if (promptType === 'yesno') {
-      buttons = `
-        <span class="kc-label">CONFIRM:</span>
+      buttons = `<span class="kc-label">CONFIRM:</span>
         <button onclick="sendKey('${n}', 'Up')" title="Move up">&#x2191;</button>
         <button onclick="sendKey('${n}', 'Down')" title="Move down">&#x2193;</button>
         <button onclick="sendKey('${n}', 'Enter')" title="Confirm">ENTER</button>
@@ -1582,109 +1878,111 @@ function renderCard(agent) {
     keyControlsBlock = `<div class="key-controls">${buttons}</div>`;
   }
 
-  // Prompt input for all agents
   const placeholders = {
     running: 'Queue a message...',
     idle: 'Type a follow-up task...',
     completed: 'Send a new task to re-spawn...',
+    failed: 'Send a new task to re-spawn...',
   };
   let placeholder = placeholders[agent.state] || 'Send a message...';
-  if (promptType === 'plan') {
-    placeholder = 'Type feedback for the plan...';
-  }
-  const promptBlock = `
-    <div class="card-prompt">
-      <div class="prompt-row">
-        <span class="prompt-prefix">&gt;_</span>
-        <textarea placeholder="${placeholder}"
-                  onkeydown="handlePromptKey(event, '${agent.name}')"
-                  id="prompt-${agent.name}"></textarea>
-      </div>
-    </div>`;
+  if (promptType === 'plan') placeholder = 'Type feedback for the plan...';
 
-  // Hidden file input for uploads
-  const fileInput = agent.state !== 'completed'
+  const promptBlock = `<div class="card-prompt">
+    <div class="prompt-row">
+      <span class="prompt-prefix">&gt;_</span>
+      <textarea placeholder="${placeholder}"
+        onkeydown="handlePromptKey(event, '${agent.name}')"
+        id="prompt-${agent.name}"></textarea>
+    </div>
+  </div>`;
+
+  const canUpload = agent.state === 'running' || agent.state === 'idle';
+  const fileInput = canUpload
     ? `<input type="file" id="file-${agent.name}" style="display:none"
-             onchange="uploadFile('${agent.name}', this)" accept="image/*,.pdf,.txt,.csv,.json,.md,.js,.ts,.py" />`
+       onchange="uploadFile('${agent.name}', this)" accept="image/*,.pdf,.txt,.csv,.json,.md,.js,.ts,.py" />`
     : '';
 
-  // Action buttons
+  const liveState = agent.state === 'running' || agent.state === 'idle';
   let actions = '';
-  if (agent.state !== 'completed') {
-    actions = `
-      <div class="card-actions">
-        <button class="btn-send" onclick="sendPrompt('${agent.name}')">SEND</button>
-        <button onclick="document.getElementById('file-${agent.name}').click()">FILE</button>
-        <button onclick="copyAttach('${agent.name}')">TERMINAL</button>
-        <button class="btn-stop" onclick="confirmStop('${agent.name}')">STOP</button>
-        <button onclick="openOutputViewer('${agent.name}')">VIEW OUTPUT</button>
-      </div>`;
+  if (liveState) {
+    actions = `<div class="card-actions">
+      <button class="btn-send" onclick="sendPrompt('${agent.name}')">SEND</button>
+      <button onclick="document.getElementById('file-${agent.name}').click()">FILE</button>
+      <button onclick="copyAttach('${agent.name}')">TERMINAL</button>
+      <button class="btn-stop" onclick="confirmStop('${agent.name}')">STOP</button>
+      <button onclick="openOutputViewer('${agent.name}')">VIEW OUTPUT</button>
+    </div>`;
   } else {
-    actions = `
-      <div class="card-actions">
-        <button class="btn-send" onclick="sendPrompt('${agent.name}')">RE-SPAWN</button>
-        <button onclick="openOutputViewer('${agent.name}')">VIEW OUTPUT</button>
-        <button class="btn-clear" onclick="confirmCleanup('${agent.name}')">CLEAR</button>
-      </div>`;
+    actions = `<div class="card-actions">
+      <button class="btn-send" onclick="sendPrompt('${agent.name}')">RE-SPAWN</button>
+      <button onclick="openOutputViewer('${agent.name}')">VIEW OUTPUT</button>
+      <button class="btn-clear" onclick="confirmCleanup('${agent.name}')">CLEAR</button>
+    </div>`;
   }
 
-  const dropHandlers = agent.state !== 'completed'
+  const dropHandlers = canUpload
     ? `ondragover="onCardFileDragOver(event, '${agent.name}')"
        ondragleave="onCardFileDragLeave(event)"
        ondrop="onCardFileDrop(event, '${agent.name}')"`
     : '';
-  const dropHint = agent.state !== 'completed'
-    ? '<div class="drop-hint">DROP FILE HERE</div>'
-    : '';
+  const dropHint = canUpload ? '<div class="drop-hint">DROP FILE HERE</div>' : '';
 
-  return `
-    <div class="card" data-state="${agent.state}" data-name="${agent.name}"
-         draggable="true"
-         ondragstart="onDragStart(event, '${agent.name}')"
-         ondragend="onDragEnd(event)"
-         ${dropHandlers}>
-      <div class="card-titlebar">
-        <span>${escapeHtml(agent.label)}</span>
-        <span style="display:flex;gap:6px;align-items:center">
-          ${promptType ? `<span class="prompt-badge" onclick="openOutputViewer('${agent.name}')" title="Click to view & respond">${promptTypeLabel(promptType)}</span>` : ''}
-          <span class="state-badge">${agent.state.toUpperCase()}</span>
-        </span>
-      </div>
-      <div class="card-body">
-        ${metaLines}
-        ${activityBlock}
-      </div>
-      ${keyControlsBlock}
-      ${promptBlock}
-      ${fileInput}
-      ${dropHint}
-      ${actions}
-    </div>`;
+  return `<div class="card" data-state="${agent.state}" data-name="${agent.name}"
+    draggable="true"
+    ondragstart="onDragStart(event, '${agent.name}')"
+    ondragend="onDragEnd(event)"
+    ${dropHandlers}>
+    <div class="card-titlebar">
+      <span>${escapeHtml(agent.label)}</span>
+      <span style="display:flex;gap:6px;align-items:center">
+        <span class="source-badge">${sourceLabel}</span>
+        ${promptType ? `<span class="prompt-badge" onclick="openOutputViewer('${agent.name}')" title="Click to view & respond">${promptTypeLabel(promptType)}</span>` : ''}
+        <span class="state-badge">${agent.state.toUpperCase()}</span>
+      </span>
+    </div>
+    <div class="card-body">${metaLines}${activityBlock}</div>
+    ${keyControlsBlock}
+    ${promptBlock}
+    ${fileInput}
+    ${dropHint}
+    ${actions}
+  </div>`;
 }
 
-// ─── ACTIONS ───────────────────────────────────────────────────────────
 async function spawnAgent() {
   const projectPath = document.getElementById('spawnProject').value.trim();
   const prompt = document.getElementById('spawnPrompt').value.trim();
+  const agentId = document.getElementById('spawnAgentId').value.trim();
+  const agentBinaryPath = document.getElementById('spawnBinaryPath').value.trim();
+  const argsText = document.getElementById('spawnArgs').value || '';
+  const statusMode = document.getElementById('spawnStatusMode').value;
+  const statusFilePath = document.getElementById('spawnStatusFilePath').value.trim();
+  const systemInitPrompt = document.getElementById('spawnSystemInitPrompt').value.trim();
+  const runtimeInitPrompt = document.getElementById('spawnRuntimeInitPrompt').value.trim();
+  const agentArgs = argsText.split('\n').map(v => v.trim()).filter(Boolean);
 
   if (!projectPath || !prompt) {
     alert('Project path and prompt are required');
     return;
   }
 
+  const payload = { projectPath, prompt, agentId, agentArgs, statusMode };
+  if (agentBinaryPath) payload.agentBinaryPath = agentBinaryPath;
+  if (statusFilePath) payload.statusFilePath = statusFilePath;
+  if (systemInitPrompt) payload.systemInitPrompt = systemInitPrompt;
+  if (runtimeInitPrompt) payload.runtimeInitPrompt = runtimeInitPrompt;
+
   try {
-    const res = await fetch('/api/agents', {
+    const data = await apiJson('/api/agents', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projectPath, prompt }),
+      body: JSON.stringify(payload),
     });
-    const data = await res.json();
-    if (data.error) {
-      alert('Error: ' + data.error);
-      return;
-    }
     closeSpawnModal();
-    fetchAgents();
+    await fetchAgents();
+    if (data && data.callbackSecret) {
+      console.log(`[spawn] callbackSecret(${data.name}): ${data.callbackSecret}`);
+    }
   } catch (e) {
     alert('Failed to spawn agent: ' + e.message);
   }
@@ -1695,28 +1993,26 @@ async function sendPrompt(agentName) {
   if (!textarea) return;
   const message = textarea.value.trim();
   if (!message) return;
-
   textarea.value = '';
 
-  // Check if this agent has a plan prompt - route to plan-feedback endpoint
   const agent = agents.find(a => a.name === agentName);
   const pType = agent ? (agent.promptType || detectPromptTypeFromText(agent.lastActivity || '')) : null;
 
   try {
     if (pType === 'plan') {
-      await fetch(`/api/agents/${agentName}/plan-feedback`, {
+      await apiJson(`/api/agents/${agentName}/plan-feedback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),
       });
     } else {
-      await fetch(`/api/agents/${agentName}/send`, {
+      await apiJson(`/api/agents/${agentName}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),
       });
     }
-    fetchAgents();
+    await fetchAgents();
   } catch (e) {
     console.error('Send error:', e);
   }
@@ -1724,7 +2020,7 @@ async function sendPrompt(agentName) {
 
 async function sendKey(agentName, key) {
   try {
-    await fetch(`/api/agents/${agentName}/keys`, {
+    await apiJson(`/api/agents/${agentName}/keys`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ keys: key }),
@@ -1749,25 +2045,21 @@ async function uploadFile(agentName, input) {
   formData.append('file', file);
 
   try {
-    const res = await fetch(`/api/agents/${agentName}/upload`, {
+    const res = await apiFetch(`/api/agents/${agentName}/upload`, {
       method: 'POST',
       body: formData,
     });
     const data = await res.json();
-    if (data.error) {
-      alert('Upload error: ' + data.error);
-    }
+    if (data.error) alert('Upload error: ' + data.error);
   } catch (e) {
     alert('Upload failed: ' + e.message);
   }
-  // Reset the input so the same file can be re-selected
   input.value = '';
 }
 
 function copyAttach(agentName) {
   const cmd = `tmux attach -t ${agentName}`;
   navigator.clipboard.writeText(cmd).then(() => {
-    // Brief visual feedback on the button
     const btns = document.querySelectorAll(`[data-name="${agentName}"] .card-actions button`);
     for (const btn of btns) {
       if (btn.textContent === 'TERMINAL') {
@@ -1787,8 +2079,8 @@ function copyAttach(agentName) {
 
 async function stopAgent(agentName) {
   try {
-    await fetch(`/api/agents/${agentName}`, { method: 'DELETE' });
-    fetchAgents();
+    await apiJson(`/api/agents/${agentName}`, { method: 'DELETE' });
+    await fetchAgents();
   } catch (e) {
     console.error('Stop error:', e);
   }
@@ -1814,11 +2106,10 @@ function closeConfirm() {
   pendingConfirm = null;
 }
 
-// ─── CLEANUP ───────────────────────────────────────────────────────────
 async function cleanupAgent(agentName) {
   try {
-    await fetch(`/api/agents/${agentName}/cleanup`, { method: 'DELETE' });
-    fetchAgents();
+    await apiJson(`/api/agents/${agentName}/cleanup`, { method: 'DELETE' });
+    await fetchAgents();
   } catch (e) {
     console.error('Cleanup error:', e);
   }
@@ -1826,8 +2117,8 @@ async function cleanupAgent(agentName) {
 
 async function cleanupAllCompleted() {
   try {
-    await fetch('/api/cleanup/completed', { method: 'DELETE' });
-    fetchAgents();
+    await apiJson('/api/cleanup/completed', { method: 'DELETE' });
+    await fetchAgents();
   } catch (e) {
     console.error('Cleanup all error:', e);
   }
@@ -1841,24 +2132,21 @@ function confirmCleanup(agentName) {
 }
 
 function confirmClearAll() {
-  const count = agents.filter(a => a.state === 'completed').length;
+  const count = agents.filter(a => a.state === 'completed' || a.state === 'failed').length;
   pendingConfirm = () => cleanupAllCompleted();
   document.getElementById('confirmMessage').textContent = `CLEAR ALL ${count} COMPLETED AGENT${count !== 1 ? 'S' : ''}?`;
   document.getElementById('confirmBtn').textContent = 'CLEAR ALL';
   document.getElementById('confirmOverlay').classList.add('active');
 }
 
-// ─── OUTPUT VIEWER ─────────────────────────────────────────────────────
 async function openOutputViewer(agentName) {
   currentOutputAgent = agentName;
   const agent = agents.find(a => a.name === agentName);
-  document.getElementById('outputTitle').textContent =
-    `OUTPUT: ${agent ? agent.label : agentName}`;
+  document.getElementById('outputTitle').textContent = `OUTPUT: ${agent ? agent.label : agentName}`;
   document.getElementById('outputOverlay').classList.add('active');
   document.getElementById('outputPromptInput').value = '';
   await updateOutputViewer();
 
-  // Poll for output updates
   if (outputPollTimer) clearInterval(outputPollTimer);
   outputPollTimer = setInterval(updateOutputViewer, 3000);
 }
@@ -1866,14 +2154,11 @@ async function openOutputViewer(agentName) {
 async function updateOutputViewer() {
   if (!currentOutputAgent) return;
   try {
-    const res = await fetch(`/api/agents/${currentOutputAgent}/output`);
-    const data = await res.json();
+    const data = await apiJson(`/api/agents/${currentOutputAgent}/output`);
     const el = document.getElementById('outputContent');
     const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
     el.innerHTML = data.raw ? ansiToHtml(data.raw) : escapeHtml(data.output || '(no output)');
     if (wasAtBottom) el.scrollTop = el.scrollHeight;
-
-    // Show key controls if agent has an interactive prompt
     updateOutputKeyControls();
   } catch (e) {
     console.error('Output fetch error:', e);
@@ -1883,7 +2168,6 @@ async function updateOutputViewer() {
 function detectPromptTypeFromText(text) {
   if (/space to select/i.test(text) && /enter to confirm/i.test(text)) return 'multiselect';
   if (/allow\s+(once|always)/i.test(text) && /deny/i.test(text)) return 'permission';
-  // Plan detection before select (plan prompts also show "enter to select")
   if (/ctrl.g to edit/i.test(text)) return 'plan';
   if (/manually approve/i.test(text) && /\d\.\s/.test(text)) return 'plan';
   if (/execute.*plan/i.test(text) && /\d\.\s/.test(text)) return 'plan';
@@ -1896,16 +2180,12 @@ function updateOutputKeyControls() {
   const kcEl = document.getElementById('outputKeyControls');
   if (!currentOutputAgent || !kcEl) return;
 
-  // Try server-side detection first, then fallback to client-side from rendered output
   const agent = agents.find(a => a.name === currentOutputAgent);
   let pType = agent ? agent.promptType : null;
 
   if (!pType) {
-    // Detect from the output content text directly
     const outputEl = document.getElementById('outputContent');
-    if (outputEl) {
-      pType = detectPromptTypeFromText(outputEl.textContent || '');
-    }
+    if (outputEl) pType = detectPromptTypeFromText(outputEl.textContent || '');
   }
 
   if (!pType) {
@@ -1915,38 +2195,32 @@ function updateOutputKeyControls() {
 
   let buttons = '';
   if (pType === 'select') {
-    buttons = `
-      <span class="kc-label">SELECT:</span>
+    buttons = `<span class="kc-label">SELECT:</span>
       <button onclick="sendKeyFromOutput('Up')" title="Move up">&#x2191;</button>
       <button onclick="sendKeyFromOutput('Down')" title="Move down">&#x2193;</button>
       <button onclick="sendKeyFromOutput('Enter')" title="Confirm selection">ENTER</button>
       <button onclick="sendKeyFromOutput('Escape')" title="Cancel">ESC</button>`;
   } else if (pType === 'multiselect') {
-    buttons = `
-      <span class="kc-label">MULTI-SELECT:</span>
+    buttons = `<span class="kc-label">MULTI-SELECT:</span>
       <button onclick="sendKeyFromOutput('Up')" title="Move up">&#x2191;</button>
       <button onclick="sendKeyFromOutput('Down')" title="Move down">&#x2193;</button>
       <button onclick="sendKeyFromOutput('Space')" title="Toggle selection">SPACE</button>
       <button onclick="sendKeyFromOutput('Enter')" title="Confirm selections">ENTER</button>
       <button onclick="sendKeyFromOutput('Escape')" title="Cancel">ESC</button>`;
   } else if (pType === 'permission') {
-    buttons = `
-      <span class="kc-label">PERMISSION:</span>
+    buttons = `<span class="kc-label">PERMISSION:</span>
       <button onclick="sendKeyFromOutput('Up')" title="Move up">&#x2191;</button>
       <button onclick="sendKeyFromOutput('Down')" title="Move down">&#x2193;</button>
       <button onclick="sendKeyFromOutput('Enter')" title="Confirm">ENTER</button>
       <button onclick="sendKeyFromOutput('Escape')" title="Cancel">ESC</button>`;
   } else if (pType === 'plan') {
-    buttons = `
-      <span class="kc-label">PLAN:</span>
+    buttons = `<span class="kc-label">PLAN:</span>
       <button onclick="sendKeyFromOutput('Up')" title="Move up">&#x2191;</button>
       <button onclick="sendKeyFromOutput('Down')" title="Move down">&#x2193;</button>
       <button onclick="sendKeyFromOutput('Enter')" title="Confirm selection">ENTER</button>
-      <button onclick="sendKeyFromOutput('Escape')" title="Cancel">ESC</button>
-      <span style="color:var(--dim);font-size:10px;margin-left:4px">&middot; or type feedback below</span>`;
+      <button onclick="sendKeyFromOutput('Escape')" title="Cancel">ESC</button>`;
   } else if (pType === 'yesno') {
-    buttons = `
-      <span class="kc-label">CONFIRM:</span>
+    buttons = `<span class="kc-label">CONFIRM:</span>
       <button onclick="sendKeyFromOutput('Up')" title="Move up">&#x2191;</button>
       <button onclick="sendKeyFromOutput('Down')" title="Move down">&#x2193;</button>
       <button onclick="sendKeyFromOutput('Enter')" title="Confirm">ENTER</button>
@@ -1960,7 +2234,6 @@ function updateOutputKeyControls() {
     kcEl.style.display = 'none';
   }
 
-  // Update output prompt placeholder based on prompt type
   const outputInput = document.getElementById('outputPromptInput');
   if (outputInput) {
     outputInput.placeholder = pType === 'plan' ? 'Type feedback for the plan...' : 'Send a message...';
@@ -1970,7 +2243,6 @@ function updateOutputKeyControls() {
 async function sendKeyFromOutput(key) {
   if (!currentOutputAgent) return;
   await sendKey(currentOutputAgent, key);
-  // Refresh output immediately to show the effect
   setTimeout(updateOutputViewer, 300);
 }
 
@@ -1990,7 +2262,6 @@ async function sendFromOutput() {
   if (!message) return;
   input.value = '';
 
-  // Check if plan prompt is active - route to plan-feedback endpoint
   const agent = agents.find(a => a.name === currentOutputAgent);
   let pType = agent ? agent.promptType : null;
   if (!pType) {
@@ -2000,13 +2271,13 @@ async function sendFromOutput() {
 
   try {
     if (pType === 'plan') {
-      await fetch(`/api/agents/${currentOutputAgent}/plan-feedback`, {
+      await apiJson(`/api/agents/${currentOutputAgent}/plan-feedback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),
       });
     } else {
-      await fetch(`/api/agents/${currentOutputAgent}/send`, {
+      await apiJson(`/api/agents/${currentOutputAgent}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message }),
@@ -2017,10 +2288,12 @@ async function sendFromOutput() {
   }
 }
 
-// ─── SPAWN MODAL ───────────────────────────────────────────────────────
 function openSpawnModal() {
   document.getElementById('spawnProject').value = '';
   document.getElementById('spawnPrompt').value = '';
+  document.getElementById('spawnBinaryPath').value = '';
+  document.getElementById('spawnStatusFilePath').value = '';
+  document.getElementById('spawnRuntimeInitPrompt').value = '';
   document.getElementById('spawnModal').classList.add('active');
   loadRecentProjects().then(() => {
     document.getElementById('spawnProject').focus();
@@ -2033,7 +2306,6 @@ function closeSpawnModal() {
   document.getElementById('folderPicker').classList.remove('active');
 }
 
-// ─── FOLDER PICKER ─────────────────────────────────────────────────────
 async function toggleFolderPicker() {
   const picker = document.getElementById('folderPicker');
   if (picker.classList.contains('active')) {
@@ -2048,13 +2320,7 @@ async function loadFolderPicker(dir) {
   const picker = document.getElementById('folderPicker');
   try {
     const url = dir ? `/api/browse?dir=${encodeURIComponent(dir)}` : '/api/browse';
-    const res = await fetch(url);
-    const data = await res.json();
-    if (data.error) {
-      picker.innerHTML = `<div class="fp-empty">${escapeHtml(data.error)}</div>`;
-      picker.classList.add('active');
-      return;
-    }
+    const data = await apiJson(url);
 
     let html = `<div class="fp-header">
       <span>${escapeHtml(data.current)}</span>
@@ -2065,7 +2331,7 @@ async function loadFolderPicker(dir) {
       html += `<div class="fp-item fp-parent" onclick="loadFolderPicker('${escapeAttr(data.parent)}')">..</div>`;
     }
 
-    if (data.dirs.length === 0) {
+    if (!data.dirs || data.dirs.length === 0) {
       html += '<div class="fp-empty">NO SUBDIRECTORIES</div>';
     } else {
       for (const d of data.dirs) {
@@ -2077,7 +2343,7 @@ async function loadFolderPicker(dir) {
     picker.innerHTML = html;
     picker.classList.add('active');
   } catch (e) {
-    picker.innerHTML = '<div class="fp-empty">FAILED TO BROWSE</div>';
+    picker.innerHTML = `<div class="fp-empty">${escapeHtml(e.message || 'FAILED TO BROWSE')}</div>`;
     picker.classList.add('active');
   }
 }
@@ -2089,20 +2355,7 @@ function selectFolder(path) {
 }
 
 function escapeAttr(str) {
-  return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-}
-
-// ─── RECENT PROJECTS COMBO BOX ─────────────────────────────────────────
-let recentProjects = [];
-let comboActiveIdx = -1;
-
-async function loadRecentProjects() {
-  try {
-    const res = await fetch('/api/recent-projects');
-    recentProjects = await res.json();
-  } catch (e) {
-    recentProjects = [];
-  }
+  return String(str).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 }
 
 function renderProjectDropdown(items) {
@@ -2174,12 +2427,14 @@ function updateComboActive(opts) {
   }
 }
 
-// Close dropdown on outside click
 document.addEventListener('click', (e) => {
   if (!e.target.closest('.combo-wrapper')) closeProjectDropdown();
 });
 
-// ─── DRAG AND DROP ─────────────────────────────────────────────────────
+document.getElementById('spawnAgentId').addEventListener('change', (e) => {
+  applyProfileDefaults(e.target.value);
+});
+
 function onDragStart(event, agentName) {
   draggedAgentName = agentName;
   event.dataTransfer.effectAllowed = 'move';
@@ -2190,7 +2445,6 @@ function onDragStart(event, agentName) {
 function onDragEnd(event) {
   event.target.classList.remove('dragging');
   draggedAgentName = null;
-  // Remove all drag-over classes
   document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
 }
 
@@ -2210,11 +2464,9 @@ function onDrop(event) {
 
   const agentName = event.dataTransfer.getData('text/plain');
   if (!agentName) return;
-
   confirmStop(agentName);
 }
 
-// ─── KEYBOARD SHORTCUTS ───────────────────────────────────────────────
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {
     if (document.getElementById('outputOverlay').classList.contains('active')) {
@@ -2226,10 +2478,9 @@ document.addEventListener('keydown', (event) => {
     }
   }
 
-  // 'n' to open spawn modal (when not typing in an input)
   const tag = document.activeElement.tagName;
   if (event.key === 'n' && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
-    const anyOverlay = document.querySelector('.modal-overlay.active, .output-overlay.active, .confirm-overlay.active');
+    const anyOverlay = document.querySelector('.modal-overlay.active, .output-overlay.active, .confirm-overlay.active, .auth-overlay.active');
     if (!anyOverlay) {
       event.preventDefault();
       openSpawnModal();
@@ -2356,15 +2607,15 @@ function onCardFileDrop(event, agentName) {
   const formData = new FormData();
   formData.append('file', file);
 
-  fetch(`/api/agents/${agentName}/upload`, {
+  apiFetch(`/api/agents/${agentName}/upload`, {
     method: 'POST',
     body: formData,
   })
-  .then(r => r.json())
-  .then(data => {
-    if (data.error) console.error('Drop upload error:', data.error);
-  })
-  .catch(e => console.error('Drop upload failed:', e));
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) console.error('Drop upload error:', data.error);
+    })
+    .catch(e => console.error('Drop upload failed:', e));
 }
 
 // ─── HELPERS ───────────────────────────────────────────────────────────
@@ -2397,8 +2648,6 @@ function promptTypeLabel(type) {
 }
 
 // ─── MOBILE TAB SWITCHING ───────────────────────────────────────────
-let activeTab = 'running';
-
 function isMobile() {
   return window.matchMedia('(max-width: 768px)').matches;
 }
@@ -2439,9 +2688,19 @@ function initMobileLayout() {
 window.addEventListener('resize', initMobileLayout);
 
 // ─── INIT ──────────────────────────────────────────────────────────────
-fetchAgents();
-connectSSE();
-initMobileLayout();
+async function initializeApp() {
+  await loadAgentProfiles();
+  await loadRecentProjects();
+  await fetchAgents();
+  connectSSE();
+  initMobileLayout();
+}
+
+if (viewerPassword) {
+  initializeApp().catch(() => openAuthModal(false));
+} else {
+  openAuthModal(false);
+}
 </script>
 </body>
 </html>
