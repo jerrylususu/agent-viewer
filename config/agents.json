@@ -1,0 +1,70 @@
+{
+  "profiles": [
+    {
+      "id": "claude",
+      "displayName": "Claude Code",
+      "command": "claude",
+      "defaultArgs": [
+        "--chrome",
+        "--dangerously-skip-permissions"
+      ],
+      "detect": {
+        "processRegex": "(?:^|/)claude(?:\\s|$)"
+      },
+      "readiness": {
+        "type": "prompt_regex",
+        "pattern": "^>\\s*$|^❯\\s*$|^❯\\s+\\S",
+        "timeoutMs": 30000,
+        "autoDismissClaudePrompts": true
+      },
+      "status": {
+        "mode": "heuristic",
+        "filePathTemplate": "${projectPath}/.agent-status.json"
+      },
+      "env": {},
+      "systemInitPrompt": ""
+    },
+    {
+      "id": "codex",
+      "displayName": "OpenAI Codex CLI",
+      "command": "codex",
+      "defaultArgs": [],
+      "detect": {
+        "processRegex": "(?:^|/)codex(?:\\s|$)"
+      },
+      "readiness": {
+        "type": "prompt_regex",
+        "pattern": "^>\\s*$|^❯\\s*$|^❯\\s+\\S",
+        "timeoutMs": 30000,
+        "autoDismissClaudePrompts": false
+      },
+      "status": {
+        "mode": "heuristic",
+        "filePathTemplate": "${projectPath}/.agent-status.json"
+      },
+      "env": {},
+      "systemInitPrompt": ""
+    },
+    {
+      "id": "opencode",
+      "displayName": "OpenCode CLI",
+      "command": "opencode",
+      "defaultArgs": [],
+      "detect": {
+        "processRegex": "(?:^|/)opencode(?:\\s|$)"
+      },
+      "readiness": {
+        "type": "prompt_regex",
+        "pattern": "^>\\s*$|^❯\\s*$|^❯\\s+\\S",
+        "timeoutMs": 30000,
+        "autoDismissClaudePrompts": false
+      },
+      "status": {
+        "mode": "heuristic",
+        "filePathTemplate": "${projectPath}/.agent-status.json"
+      },
+      "env": {},
+      "systemInitPrompt": ""
+    }
+  ]
+}
