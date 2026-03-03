@@ -15,6 +15,8 @@ const REGISTRY_FILE = path.join(__dirname, '.agent-registry.json');
 const AGENT_PROFILE_FILE = path.join(__dirname, 'config', 'agents.json');
 const POLL_INTERVAL = 3000;
 const SPAWN_PREFIX = 'agent-';
+const SHOW_ALL_TMUX_SESSIONS = process.argv.includes('--all-tmux-sessions')
+  || /^(1|true|yes|on)$/i.test(String(process.env.AGENT_VIEWER_ALL_TMUX_SESSIONS || '').trim());
 
 const API_PASSWORD = process.env.AGENT_VIEWER_PASSWORD || 'agent-viewer';
 if (!process.env.AGENT_VIEWER_PASSWORD) {
@@ -968,6 +970,8 @@ function buildAgentInfo(sessionName, sessionsCache) {
     statusSource: stateResult.source,
     statusDetail: stateResult.detail,
     statusFilePath: reg.statusFilePath || '',
+    externalSession: Boolean(reg.externalSession),
+    canRespawn: !Boolean(reg.respawnDisabled),
   };
 }
 
@@ -990,13 +994,47 @@ function buildRegistryFromDiscoveredSession(session, agentId) {
   };
 }
 
+function buildRegistryFromExternalSession(session) {
+  const projectPath = getPaneCurrentPath(session.name);
+
+  registry[session.name] = {
+    label: session.name,
+    projectPath,
+    prompt: '',
+    createdAt: session.created,
+    state: 'running',
+    discovered: false,
+    labelRefreshed: true,
+    externalSession: true,
+    respawnDisabled: true,
+    agentId: 'tmux',
+    statusMode: 'heuristic',
+    statusSource: 'TTY',
+    statusFilePath: '',
+    callbackSecret: randomSecret(),
+  };
+}
+
 function getAllAgents() {
+  if (!SHOW_ALL_TMUX_SESSIONS) {
+    for (const name of Object.keys(registry)) {
+      if (registry[name] && registry[name].externalSession) {
+        delete registry[name];
+      }
+    }
+  }
+
   const sessions = listTmuxSessions();
-  const processTree = buildProcessTree();
-  const detectors = getProcessDetectors();
+  const processTree = SHOW_ALL_TMUX_SESSIONS ? null : buildProcessTree();
+  const detectors = SHOW_ALL_TMUX_SESSIONS ? [] : getProcessDetectors();
 
   for (const session of sessions) {
     if (registry[session.name]) continue;
+
+    if (SHOW_ALL_TMUX_SESSIONS) {
+      buildRegistryFromExternalSession(session);
+      continue;
+    }
 
     const cached = nonAgentCache.get(session.name);
     if (cached && Date.now() - cached < 30000) continue;
@@ -1015,16 +1053,24 @@ function getAllAgents() {
 
   const liveNames = new Set(sessions.map(s => s.name));
   for (const name of Object.keys(registry)) {
-    if (!liveNames.has(name) && !['completed', 'failed'].includes(registry[name].state)) {
-      registry[name].state = 'completed';
-      registry[name].statusSource = 'TTY';
-      registry[name].completedAt = registry[name].completedAt || Date.now();
+    const reg = registry[name];
+    if (!reg) continue;
+
+    if (!liveNames.has(name) && reg.externalSession) {
+      delete registry[name];
+      continue;
+    }
+
+    if (!liveNames.has(name) && !['completed', 'failed'].includes(reg.state)) {
+      reg.state = 'completed';
+      reg.statusSource = 'TTY';
+      reg.completedAt = reg.completedAt || Date.now();
     }
   }
 
   for (const name of Object.keys(registry)) {
     const r = registry[name];
-    if (r.discovered && r.label === name && !r.labelRefreshed && !['completed', 'failed'].includes(r.state)) {
+    if (r.discovered && !r.externalSession && r.label === name && !r.labelRefreshed && !['completed', 'failed'].includes(r.state)) {
       refreshDiscoveredLabel(name);
     }
   }
@@ -1163,6 +1209,10 @@ app.post('/api/agents/:name/send', (req, res) => {
     const reg = registry[name];
 
     if (reg && (reg.state === 'completed' || reg.state === 'failed')) {
+      if (reg.respawnDisabled) {
+        return res.status(400).json({ error: 'This tmux session cannot be respawned by Agent Viewer' });
+      }
+
       const projectPath = reg.projectPath || '.';
       const launchCommand = getRegistryLaunchSpec(reg);
 
@@ -1467,6 +1517,7 @@ app.listen(PORT, HOST === 'localhost' ? '127.0.0.1' : HOST, () => {
   console.log('\n  AGENT VIEWER');
   console.log('  ════════════════════════════════');
   console.log(`  Local:   http://localhost:${PORT}`);
+  console.log(`  All tmux sessions mode: ${SHOW_ALL_TMUX_SESSIONS ? 'ON' : 'OFF'}${SHOW_ALL_TMUX_SESSIONS ? ' (--all-tmux-sessions)' : ''}`);
 
   if (HOST === '0.0.0.0') {
     const interfaces = os.networkInterfaces();

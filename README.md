@@ -29,11 +29,18 @@ npm install
 AGENT_VIEWER_PASSWORD='your-password' npm start
 ```
 
+展示并接管所有 tmux 会话（不仅是 Agent）：
+
+```bash
+AGENT_VIEWER_PASSWORD='your-password' npm start -- --all-tmux-sessions
+```
+
 可选环境变量：
 
 - `HOST`：默认 `0.0.0.0`
 - `PORT`：默认 `4200`
 - `AGENT_VIEWER_PASSWORD`：API 访问密码（建议强制设置）
+- `AGENT_VIEWER_ALL_TMUX_SESSIONS`：`1/true/yes/on` 时等价于 `--all-tmux-sessions`
 
 ## 配置文件
 
