@@ -47,3 +47,9 @@
 - [x] 补充中文文档（Profile、状态回调/文件约定、配置说明）。
 - [x] 完成端到端冒烟测试与关键 API 自测（含鉴权与状态回调）。
 - [x] 按阶段提交到当前功能分支，不改动主分支。
+
+## 阶段 5：tmux 多 window/pane 支持
+- [x] 后端支持读取 session 下全部 window/pane（不再仅当前窗口）。
+- [x] Agent 列表返回 pane 结构与每个 pane 的预览摘要。
+- [x] 输出/发送/按键/plan-feedback 接口支持可选 `target` 指定 pane。
+- [x] 前端保持“一个 session 一张卡片”，并新增多 pane 预览与输出切换。

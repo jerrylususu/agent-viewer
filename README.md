@@ -9,6 +9,7 @@
 - 初始化 Prompt 组合：支持 `systemInitPrompt + runtimeInitPrompt + prompt`。
 - 状态多源判定：支持 `heuristic / file_sentinel / webhook / hybrid`。
 - 全 API 密码保护：前端本地保存密码，后端统一校验；SSE 也受保护。
+- 多 window/pane 视图：一个 tmux session 仍对应一张任务卡，但会展示该 session 下所有 pane 预览，并支持按 pane 查看输出。
 - 保留 tmux 可接管能力：随时 `tmux attach` 人工介入。
 
 ## 运行要求
@@ -59,8 +60,17 @@ AGENT_VIEWER_PASSWORD='your-password' npm start -- --all-tmux-sessions
 - `GET /api/agents`：查询全部 Agent
 - `POST /api/agents`：创建 Agent
 - `POST /api/agents/:name/send`：发送消息/重启后发送
+- `POST /api/agents/:name/keys`：发送按键（支持指定 pane）
+- `GET /api/agents/:name/output`：查看输出（支持指定 pane）
 - `POST /api/agents/:name/status-callback`：外部回调状态
 - `GET /api/events`：SSE 实时更新
+
+多 pane 相关参数：
+
+- `POST /api/agents/:name/send`：Body 可选 `target`（示例：`"agent-foo:1.0"` 或 `"1.0"`）
+- `POST /api/agents/:name/keys`：Body 可选 `target`
+- `POST /api/agents/:name/plan-feedback`：Body 可选 `target`
+- `GET /api/agents/:name/output`：Query 可选 `target`
 
 所有 `/api/*` 请求都必须提供密码：
 

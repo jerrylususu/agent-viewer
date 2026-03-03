@@ -309,6 +309,48 @@ header .status-bar .dot {
   line-height: 1.5;
 }
 
+.pane-grid {
+  margin-top: 8px;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+
+.pane-preview {
+  border: 1px solid #222;
+  background: var(--bg);
+  color: #ccc;
+  text-align: left;
+  padding: 6px 8px;
+  cursor: pointer;
+  font-family: var(--font);
+}
+
+.pane-preview:hover {
+  border-color: var(--green);
+}
+
+.pane-preview.active {
+  border-color: var(--green);
+}
+
+.pane-preview .pane-label {
+  display: block;
+  color: var(--dim);
+  font-size: 10px;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.pane-preview .pane-text {
+  display: block;
+  font-size: 11px;
+  white-space: pre-wrap;
+  line-height: 1.4;
+  max-height: 64px;
+  overflow: hidden;
+}
+
 /* ─── FILE DROP ZONE ON CARDS ──────────────────────────────────────── */
 .card.file-drag-over {
   outline: 2px dashed var(--green);
@@ -677,6 +719,39 @@ header .status-bar .dot {
 .output-header .close-btn:hover {
   background: var(--white);
   color: var(--bg);
+}
+
+.output-pane-tabs {
+  display: none;
+  border-bottom: 1px solid var(--border);
+  padding: 8px 10px;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.output-pane-tabs.show {
+  display: flex;
+}
+
+.output-pane-tab {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--dim);
+  font-family: var(--font);
+  font-size: 11px;
+  padding: 4px 8px;
+  cursor: pointer;
+  text-transform: uppercase;
+}
+
+.output-pane-tab:hover {
+  color: var(--white);
+  border-color: var(--white);
+}
+
+.output-pane-tab.active {
+  color: var(--green);
+  border-color: var(--green);
 }
 
 .output-content {
@@ -1565,6 +1640,7 @@ header .status-bar .dot {
     <span id="outputTitle">OUTPUT</span>
     <button class="close-btn" onclick="closeOutputViewer()">[X] CLOSE</button>
   </div>
+  <div class="output-pane-tabs" id="outputPaneTabs"></div>
   <div class="output-content" id="outputContent"></div>
   <div class="key-controls" id="outputKeyControls" style="display:none"></div>
   <div class="output-prompt">
@@ -1613,6 +1689,8 @@ let comboActiveIdx = -1;
 let viewerPassword = localStorage.getItem(AUTH_KEY) || '';
 
 let currentOutputAgent = null;
+let currentOutputTarget = null;
+let currentOutputPanes = [];
 let outputPollTimer = null;
 let pendingConfirm = null;
 let draggedAgentName = null;
@@ -1836,7 +1914,8 @@ function renderCard(agent) {
     metaLines += `<div class="meta">${agent.state === 'failed' ? 'FAILED' : 'COMPLETED'}: <span>${completedAgo}</span></div>`;
   }
 
-  const activityBlock = lastActHtml ? `<div class="activity">${lastActHtml}</div>` : '';
+  const panePreviewBlock = renderPanePreviewGrid(agent);
+  const activityBlock = panePreviewBlock || (lastActHtml ? `<div class="activity">${lastActHtml}</div>` : '');
   const promptType = agent.promptType || detectPromptTypeFromText(agent.lastActivity || '');
 
   let keyControlsBlock = '';
@@ -2018,12 +2097,14 @@ async function sendPrompt(agentName) {
   }
 }
 
-async function sendKey(agentName, key) {
+async function sendKey(agentName, key, target = null) {
   try {
+    const payload = { keys: key };
+    if (target) payload.target = target;
     await apiJson(`/api/agents/${agentName}/keys`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ keys: key }),
+      body: JSON.stringify(payload),
     });
   } catch (e) {
     console.error('Send key error:', e);
@@ -2139,8 +2220,10 @@ function confirmClearAll() {
   document.getElementById('confirmOverlay').classList.add('active');
 }
 
-async function openOutputViewer(agentName) {
+async function openOutputViewer(agentName, target = null) {
   currentOutputAgent = agentName;
+  currentOutputTarget = target || null;
+  currentOutputPanes = [];
   const agent = agents.find(a => a.name === agentName);
   document.getElementById('outputTitle').textContent = `OUTPUT: ${agent ? agent.label : agentName}`;
   document.getElementById('outputOverlay').classList.add('active');
@@ -2154,7 +2237,13 @@ async function openOutputViewer(agentName) {
 async function updateOutputViewer() {
   if (!currentOutputAgent) return;
   try {
-    const data = await apiJson(`/api/agents/${currentOutputAgent}/output`);
+    const query = currentOutputTarget ? `?target=${encodeURIComponent(currentOutputTarget)}` : '';
+    const data = await apiJson(`/api/agents/${currentOutputAgent}/output${query}`);
+    currentOutputTarget = data.selectedTarget || currentOutputTarget;
+    currentOutputPanes = Array.isArray(data.panes) ? data.panes : [];
+
+    renderOutputPaneTabs(currentOutputPanes, currentOutputTarget);
+
     const el = document.getElementById('outputContent');
     const wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
     el.innerHTML = data.raw ? ansiToHtml(data.raw) : escapeHtml(data.output || '(no output)');
@@ -2176,12 +2265,40 @@ function detectPromptTypeFromText(text) {
   return null;
 }
 
+function paneTargetLabel(pane) {
+  return `W${pane.windowIndex}.${pane.paneIndex}${pane.active ? '*' : ''}`;
+}
+
+function renderOutputPaneTabs(panes, selectedTarget) {
+  const tabsEl = document.getElementById('outputPaneTabs');
+  if (!tabsEl) return;
+
+  if (!Array.isArray(panes) || panes.length <= 1) {
+    tabsEl.classList.remove('show');
+    tabsEl.innerHTML = '';
+    return;
+  }
+
+  tabsEl.classList.add('show');
+  tabsEl.innerHTML = panes.map(pane => {
+    const target = escapeAttr(pane.target || '');
+    const active = pane.target === selectedTarget ? 'active' : '';
+    return `<button class="output-pane-tab ${active}" onclick="selectOutputPane('${target}')">${escapeHtml(paneTargetLabel(pane))}</button>`;
+  }).join('');
+}
+
+function selectOutputPane(target) {
+  currentOutputTarget = target;
+  updateOutputViewer();
+}
+
 function updateOutputKeyControls() {
   const kcEl = document.getElementById('outputKeyControls');
   if (!currentOutputAgent || !kcEl) return;
 
   const agent = agents.find(a => a.name === currentOutputAgent);
-  let pType = agent ? agent.promptType : null;
+  const sameAsPrimary = agent && (!currentOutputTarget || currentOutputTarget === agent.primaryPaneTarget);
+  let pType = (agent && sameAsPrimary) ? agent.promptType : null;
 
   if (!pType) {
     const outputEl = document.getElementById('outputContent');
@@ -2242,13 +2359,20 @@ function updateOutputKeyControls() {
 
 async function sendKeyFromOutput(key) {
   if (!currentOutputAgent) return;
-  await sendKey(currentOutputAgent, key);
+  await sendKey(currentOutputAgent, key, currentOutputTarget);
   setTimeout(updateOutputViewer, 300);
 }
 
 function closeOutputViewer() {
   currentOutputAgent = null;
+  currentOutputTarget = null;
+  currentOutputPanes = [];
   document.getElementById('outputOverlay').classList.remove('active');
+  const tabsEl = document.getElementById('outputPaneTabs');
+  if (tabsEl) {
+    tabsEl.classList.remove('show');
+    tabsEl.innerHTML = '';
+  }
   if (outputPollTimer) {
     clearInterval(outputPollTimer);
     outputPollTimer = null;
@@ -2263,7 +2387,8 @@ async function sendFromOutput() {
   input.value = '';
 
   const agent = agents.find(a => a.name === currentOutputAgent);
-  let pType = agent ? agent.promptType : null;
+  const sameAsPrimary = agent && (!currentOutputTarget || currentOutputTarget === agent.primaryPaneTarget);
+  let pType = (agent && sameAsPrimary) ? agent.promptType : null;
   if (!pType) {
     const outputEl = document.getElementById('outputContent');
     if (outputEl) pType = detectPromptTypeFromText(outputEl.textContent || '');
@@ -2274,15 +2399,16 @@ async function sendFromOutput() {
       await apiJson(`/api/agents/${currentOutputAgent}/plan-feedback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, target: currentOutputTarget }),
       });
     } else {
       await apiJson(`/api/agents/${currentOutputAgent}/send`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message }),
+        body: JSON.stringify({ message, target: currentOutputTarget }),
       });
     }
+    setTimeout(updateOutputViewer, 300);
   } catch (e) {
     console.error('Send from output error:', e);
   }
@@ -2647,6 +2773,28 @@ function promptTypeLabel(type) {
   return labels[type] || type.toUpperCase();
 }
 
+function renderPanePreviewGrid(agent) {
+  const panes = Array.isArray(agent.panes) ? agent.panes : [];
+  if (panes.length <= 1) return '';
+
+  const maxItems = 6;
+  const items = panes.slice(0, maxItems).map(pane => {
+    const paneLabel = `W${pane.windowIndex}.${pane.paneIndex}${pane.active ? '*' : ''}`;
+    const preview = pane.preview ? ansiToHtml(pane.preview) : '<span style="color:#444">(empty)</span>';
+    const target = escapeAttr(pane.target || '');
+    return `<button class="pane-preview ${pane.active ? 'active' : ''}" onclick="openOutputViewer('${agent.name}', '${target}')">
+      <span class="pane-label">${escapeHtml(paneLabel)}</span>
+      <span class="pane-text">${preview}</span>
+    </button>`;
+  });
+
+  if (panes.length > maxItems) {
+    items.push(`<div class="pane-preview"><span class="pane-label">MORE</span><span class="pane-text">+${panes.length - maxItems} panes</span></div>`);
+  }
+
+  return `<div class="pane-grid">${items.join('')}</div>`;
+}
+
 // ─── MOBILE TAB SWITCHING ───────────────────────────────────────────
 function isMobile() {
   return window.matchMedia('(max-width: 768px)').matches;
@@ -2665,7 +2813,7 @@ function switchTab(tab) {
 function updateMobileTabs() {
   const running = agents.filter(a => a.state === 'running');
   const idle = agents.filter(a => a.state === 'idle');
-  const completed = agents.filter(a => a.state === 'completed');
+  const completed = agents.filter(a => a.state === 'completed' || a.state === 'failed');
 
   const tabRun = document.getElementById('tabRunCount');
   const tabIdle = document.getElementById('tabIdleCount');

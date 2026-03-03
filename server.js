@@ -504,15 +504,141 @@ function listTmuxSessions() {
     });
 }
 
-function capturePaneOutput(sessionName, lines = 200) {
-  return tmuxSafe(['capture-pane', '-e', '-t', sessionName, '-p', '-S', `-${lines}`]);
+const PANE_FIELD_SEP = '\t';
+const PANE_LIST_FORMAT = [
+  '#{window_index}',
+  '#{window_name}',
+  '#{window_active}',
+  '#{pane_index}',
+  '#{pane_id}',
+  '#{pane_active}',
+  '#{pane_pid}',
+  '#{pane_current_command}',
+  '#{pane_current_path}',
+  '#{pane_title}',
+].join(PANE_FIELD_SEP);
+
+function toFiniteNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
 }
 
-function getSessionPid(sessionName) {
-  const output = tmuxSafe(['list-panes', '-t', sessionName, '-F', '#{pane_pid}']);
-  if (!output.trim()) return null;
-  const n = Number(output.trim());
-  return Number.isFinite(n) ? n : null;
+function listSessionPanes(sessionName) {
+  const output = tmuxSafe(['list-panes', '-s', '-t', sessionName, '-F', PANE_LIST_FORMAT], 5000);
+  if (!output.trim()) return [];
+
+  return output
+    .trim()
+    .split('\n')
+    .filter(Boolean)
+    .map(line => {
+      const parts = line.split(PANE_FIELD_SEP);
+      const [
+        windowIndex = '0',
+        windowName = '',
+        windowActive = '0',
+        paneIndex = '0',
+        paneId = '',
+        paneActive = '0',
+        panePid = '0',
+        paneCurrentCommand = '',
+        paneCurrentPath = '',
+        paneTitle = '',
+      ] = parts;
+
+      const wIdx = toFiniteNumber(windowIndex, 0);
+      const pIdx = toFiniteNumber(paneIndex, 0);
+      return {
+        target: `${sessionName}:${wIdx}.${pIdx}`,
+        windowIndex: wIdx,
+        windowName,
+        windowActive: windowActive === '1',
+        paneIndex: pIdx,
+        paneId,
+        paneActive: paneActive === '1',
+        panePid: toFiniteNumber(panePid, 0),
+        paneCurrentCommand,
+        paneCurrentPath,
+        paneTitle,
+      };
+    })
+    .sort((a, b) => (a.windowIndex - b.windowIndex) || (a.paneIndex - b.paneIndex));
+}
+
+function getPrimaryPane(panes) {
+  if (!Array.isArray(panes) || panes.length === 0) return null;
+  return panes.find(p => p.windowActive && p.paneActive)
+    || panes.find(p => p.paneActive)
+    || panes.find(p => p.windowActive)
+    || panes[0];
+}
+
+function getPrimaryPaneTarget(sessionName, panes) {
+  const list = Array.isArray(panes) ? panes : listSessionPanes(sessionName);
+  const primary = getPrimaryPane(list);
+  return primary ? primary.target : sessionName;
+}
+
+function resolveSessionTarget(sessionName, requestedTarget, panes) {
+  const list = Array.isArray(panes) ? panes : listSessionPanes(sessionName);
+  const fallbackTarget = getPrimaryPaneTarget(sessionName, list);
+
+  if (!requestedTarget) return fallbackTarget;
+  const target = String(requestedTarget).trim();
+  if (!target) return fallbackTarget;
+  if (/[\x00-\x1F]/.test(target)) return null;
+  if (target === sessionName) return fallbackTarget;
+
+  const matched = list.find(p =>
+    p.target === target
+    || p.paneId === target
+    || `${p.windowIndex}.${p.paneIndex}` === target
+    || `${p.windowIndex}:${p.paneIndex}` === target
+  );
+
+  return matched ? matched.target : null;
+}
+
+function buildPanePreview(target) {
+  const raw = capturePaneOutput(target, 24);
+  const lines = stripAnsi(raw)
+    .split('\n')
+    .map(l => l.replace(/\s+$/g, ''))
+    .filter(l => l.trim() !== '');
+  if (lines.length === 0) return '';
+  return lines.slice(-4).join('\n').slice(0, 800);
+}
+
+function capturePaneOutput(target, lines = 200) {
+  return tmuxSafe(['capture-pane', '-e', '-t', target, '-p', '-S', `-${lines}`]);
+}
+
+function getSessionPanePids(sessionName) {
+  const output = tmuxSafe(['list-panes', '-s', '-t', sessionName, '-F', '#{pane_pid}']);
+  if (!output.trim()) return [];
+  const pids = output
+    .trim()
+    .split('\n')
+    .map(v => Number(v))
+    .filter(v => Number.isFinite(v) && v > 0);
+  return [...new Set(pids)];
+}
+
+function serializePaneForClient(pane, primaryTarget) {
+  return {
+    target: pane.target,
+    windowIndex: pane.windowIndex,
+    windowName: pane.windowName,
+    paneIndex: pane.paneIndex,
+    paneId: pane.paneId,
+    active: pane.target === primaryTarget,
+    windowActive: pane.windowActive,
+    paneActive: pane.paneActive,
+    currentCommand: pane.paneCurrentCommand,
+    currentPath: pane.paneCurrentPath,
+    title: pane.paneTitle,
+    preview: pane.preview || '',
+  };
 }
 
 function getPaneCurrentPath(sessionName) {
@@ -529,8 +655,8 @@ function isProcessAlive(pid) {
   }
 }
 
-function sendKey(sessionName, key) {
-  tmux(['send-keys', '-t', sessionName, key], 5000);
+function sendKey(target, key) {
+  tmux(['send-keys', '-t', target, key], 5000);
 }
 
 async function waitForAgentReady(sessionName, profile) {
@@ -551,7 +677,8 @@ async function waitForAgentReady(sessionName, profile) {
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise(r => setTimeout(r, pollInterval));
 
-    const rawOutput = capturePaneOutput(sessionName, 30);
+    const paneTarget = getPrimaryPaneTarget(sessionName);
+    const rawOutput = capturePaneOutput(paneTarget, 30);
     const output = stripAnsi(rawOutput);
     const lines = output.split('\n').filter(l => l.trim() !== '');
     if (lines.length === 0) continue;
@@ -570,9 +697,9 @@ async function waitForAgentReady(sessionName, profile) {
 
       if (isTrustPrompt || isSettingsError) {
         try {
-          sendKey(sessionName, 'Down');
+          sendKey(paneTarget, 'Down');
           await new Promise(r => setTimeout(r, 200));
-          sendKey(sessionName, 'Enter');
+          sendKey(paneTarget, 'Enter');
         } catch {
           // ignore
         }
@@ -581,7 +708,7 @@ async function waitForAgentReady(sessionName, profile) {
 
       if (isInfoPrompt) {
         try {
-          sendKey(sessionName, 'Enter');
+          sendKey(paneTarget, 'Enter');
         } catch {
           // ignore
         }
@@ -688,15 +815,15 @@ async function spawnAgent(request) {
   return finalName;
 }
 
-function sendToAgent(sessionName, message) {
+function sendToAgent(target, message) {
   if (!isSafeInputText(message)) return false;
 
   try {
-    tmux(['send-keys', '-t', sessionName, '-l', message], 5000);
-    tmux(['send-keys', '-t', sessionName, 'Enter'], 5000);
+    tmux(['send-keys', '-t', target, '-l', message], 5000);
+    tmux(['send-keys', '-t', target, 'Enter'], 5000);
     return true;
   } catch (e) {
-    console.error(`[SEND] FAILED to ${sessionName}:`, e.message);
+    console.error(`[SEND] FAILED to ${target}:`, e.message);
     return false;
   }
 }
@@ -711,7 +838,7 @@ function killAgent(sessionName) {
   }
 }
 
-function detectAgentStateHeuristic(sessionName, sessionsCache) {
+function detectAgentStateHeuristic(sessionName, sessionsCache, paneTarget) {
   const reg = registry[sessionName];
   if (!reg) return 'unknown';
 
@@ -721,14 +848,15 @@ function detectAgentStateHeuristic(sessionName, sessionsCache) {
 
   if (!session) return 'completed';
 
-  const pid = getSessionPid(sessionName);
-  if (!isProcessAlive(pid)) return 'completed';
+  const panePids = getSessionPanePids(sessionName);
+  if (panePids.length > 0 && !panePids.some(pid => isProcessAlive(pid))) return 'completed';
 
   if (reg.lastMessageSentAt && (Date.now() - reg.lastMessageSentAt) < 10000) {
     return 'running';
   }
 
-  const rawOutput = capturePaneOutput(sessionName, 50);
+  const target = paneTarget || getPrimaryPaneTarget(sessionName);
+  const rawOutput = capturePaneOutput(target, 50);
   const output = stripAnsi(rawOutput);
   const lines = output.split('\n').filter(l => l.trim() !== '');
   if (lines.length === 0) return 'running';
@@ -847,7 +975,7 @@ function parseStatusFile(reg) {
   return null;
 }
 
-function resolveAgentState(sessionName, sessionsCache) {
+function resolveAgentState(sessionName, sessionsCache, paneTarget) {
   const reg = registry[sessionName] || {};
   const statusMode = STATUS_MODES.has(reg.statusMode) ? reg.statusMode : 'heuristic';
 
@@ -869,14 +997,15 @@ function resolveAgentState(sessionName, sessionsCache) {
   }
 
   return {
-    state: detectAgentStateHeuristic(sessionName, sessionsCache),
+    state: detectAgentStateHeuristic(sessionName, sessionsCache, paneTarget),
     source: 'TTY',
     detail: null,
   };
 }
 
-function detectPromptType(sessionName) {
-  const rawOutput = capturePaneOutput(sessionName, 50);
+function detectPromptType(sessionName, paneTarget) {
+  const target = paneTarget || getPrimaryPaneTarget(sessionName);
+  const rawOutput = capturePaneOutput(target, 50);
   const output = stripAnsi(rawOutput);
   const lines = output.split('\n').filter(l => l.trim() !== '');
   if (lines.length === 0) return null;
@@ -911,8 +1040,9 @@ const NOISE_PATTERNS = [
   /^\s*$/,
 ];
 
-function getLastActivity(sessionName) {
-  const rawOutput = capturePaneOutput(sessionName, 30);
+function getLastActivity(sessionName, paneTarget) {
+  const target = paneTarget || getPrimaryPaneTarget(sessionName);
+  const rawOutput = capturePaneOutput(target, 30);
   const lines = rawOutput.split('\n');
 
   const meaningful = [];
@@ -928,7 +1058,9 @@ function getLastActivity(sessionName) {
 
 function buildAgentInfo(sessionName, sessionsCache) {
   const reg = registry[sessionName] || {};
-  const stateResult = resolveAgentState(sessionName, sessionsCache);
+  const paneList = listSessionPanes(sessionName);
+  const primaryPaneTarget = getPrimaryPaneTarget(sessionName, paneList);
+  const stateResult = resolveAgentState(sessionName, sessionsCache, primaryPaneTarget);
   const state = stateResult.state;
 
   if (registry[sessionName]) {
@@ -951,7 +1083,15 @@ function buildAgentInfo(sessionName, sessionsCache) {
     }
   }
 
-  const promptType = (state === 'completed' || state === 'failed') ? null : detectPromptType(sessionName);
+  const live = state !== 'completed' && state !== 'failed';
+  const panes = paneList.map(pane => {
+    if (live) {
+      pane.preview = buildPanePreview(pane.target);
+    }
+    return serializePaneForClient(pane, primaryPaneTarget);
+  });
+
+  const promptType = live ? detectPromptType(sessionName, primaryPaneTarget) : null;
 
   return {
     name: sessionName,
@@ -963,7 +1103,10 @@ function buildAgentInfo(sessionName, sessionsCache) {
     createdAt: reg.createdAt || 0,
     idleSince: reg.idleSince || null,
     completedAt: reg.completedAt || null,
-    lastActivity: (state === 'completed' || state === 'failed') ? '' : getLastActivity(sessionName),
+    lastActivity: live ? getLastActivity(sessionName, primaryPaneTarget) : '',
+    panes,
+    paneCount: panes.length,
+    primaryPaneTarget,
     discovered: Boolean(reg.discovered),
     agentId: reg.agentId || '',
     statusMode: reg.statusMode || 'heuristic',
@@ -1039,10 +1182,14 @@ function getAllAgents() {
     const cached = nonAgentCache.get(session.name);
     if (cached && Date.now() - cached < 30000) continue;
 
-    const panePid = getSessionPid(session.name);
-    if (!panePid) continue;
+    const panePids = getSessionPanePids(session.name);
+    if (panePids.length === 0) continue;
 
-    const detection = findAgentDescendant(panePid, processTree, detectors);
+    let detection = { matched: false, agentId: '' };
+    for (const panePid of panePids) {
+      detection = findAgentDescendant(panePid, processTree, detectors);
+      if (detection.matched) break;
+    }
     if (detection.matched) {
       buildRegistryFromDiscoveredSession(session, detection.agentId);
       refreshDiscoveredLabel(session.name);
@@ -1196,7 +1343,7 @@ app.post('/api/agents/:name/status-callback', (req, res) => {
 app.post('/api/agents/:name/send', (req, res) => {
   try {
     const { name } = req.params;
-    const { message } = req.body || {};
+    const { message, target: requestedTarget } = req.body || {};
 
     if (!message) {
       return res.status(400).json({ error: 'message is required' });
@@ -1235,7 +1382,13 @@ app.post('/api/agents/:name/send', (req, res) => {
       return res.json({ status: 'respawned' });
     }
 
-    const success = sendToAgent(name, message);
+    const paneList = listSessionPanes(name);
+    const target = resolveSessionTarget(name, requestedTarget, paneList);
+    if (requestedTarget && !target) {
+      return res.status(400).json({ error: 'Invalid pane target' });
+    }
+
+    const success = sendToAgent(target || name, message);
     if (!success) {
       return res.status(500).json({ error: 'Failed to send message' });
     }
@@ -1248,7 +1401,7 @@ app.post('/api/agents/:name/send', (req, res) => {
       saveRegistry();
     }
 
-    res.json({ status: 'sent' });
+    res.json({ status: 'sent', target: target || name });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1355,7 +1508,7 @@ app.delete('/api/cleanup/completed', (req, res) => {
 app.post('/api/agents/:name/keys', (req, res) => {
   try {
     const { name } = req.params;
-    const { keys } = req.body || {};
+    const { keys, target: requestedTarget } = req.body || {};
     if (!keys) {
       return res.status(400).json({ error: 'keys is required' });
     }
@@ -1365,14 +1518,20 @@ app.post('/api/agents/:name/keys', (req, res) => {
       return res.status(400).json({ error: `Invalid key. Allowed: ${allowed.join(', ')}` });
     }
 
-    sendKey(name, keys);
+    const paneList = listSessionPanes(name);
+    const target = resolveSessionTarget(name, requestedTarget, paneList);
+    if (requestedTarget && !target) {
+      return res.status(400).json({ error: 'Invalid pane target' });
+    }
+
+    sendKey(target || name, keys);
 
     if (registry[name]) {
       registry[name].lastMessageSentAt = Date.now();
       saveRegistry();
     }
 
-    res.json({ status: 'sent', key: keys });
+    res.json({ status: 'sent', key: keys, target: target || name });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1381,12 +1540,19 @@ app.post('/api/agents/:name/keys', (req, res) => {
 app.post('/api/agents/:name/plan-feedback', async (req, res) => {
   try {
     const { name } = req.params;
-    const { message } = req.body || {};
+    const { message, target: requestedTarget } = req.body || {};
     if (!message) {
       return res.status(400).json({ error: 'message is required' });
     }
 
-    const rawOutput = capturePaneOutput(name, 50);
+    const paneList = listSessionPanes(name);
+    const target = resolveSessionTarget(name, requestedTarget, paneList);
+    if (requestedTarget && !target) {
+      return res.status(400).json({ error: 'Invalid pane target' });
+    }
+    const finalTarget = target || name;
+
+    const rawOutput = capturePaneOutput(finalTarget, 50);
     const output = stripAnsi(rawOutput);
     const lines = output.split('\n').map(l => l.trim()).filter(Boolean);
     const recentLines = lines.slice(-20);
@@ -1399,27 +1565,27 @@ app.post('/api/agents/:name/plan-feedback', async (req, res) => {
     }
 
     for (let i = 0; i < optionLines.length + 2; i++) {
-      sendKey(name, 'Up');
+      sendKey(finalTarget, 'Up');
       await new Promise(r => setTimeout(r, 50));
     }
 
     for (let i = 0; i < typeHereIdx; i++) {
-      sendKey(name, 'Down');
+      sendKey(finalTarget, 'Down');
       await new Promise(r => setTimeout(r, 50));
     }
 
-    sendKey(name, 'Enter');
+    sendKey(finalTarget, 'Enter');
     await new Promise(r => setTimeout(r, 500));
 
-    tmux(['send-keys', '-t', name, '-l', message], 5000);
-    sendKey(name, 'Enter');
+    tmux(['send-keys', '-t', finalTarget, '-l', message], 5000);
+    sendKey(finalTarget, 'Enter');
 
     if (registry[name]) {
       registry[name].lastMessageSentAt = Date.now();
       saveRegistry();
     }
 
-    res.json({ status: 'sent', optionIndex: typeHereIdx });
+    res.json({ status: 'sent', optionIndex: typeHereIdx, target: finalTarget });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -1427,9 +1593,25 @@ app.post('/api/agents/:name/plan-feedback', async (req, res) => {
 
 app.get('/api/agents/:name/output', (req, res) => {
   try {
-    const raw = capturePaneOutput(req.params.name, 200);
+    const { name } = req.params;
+    const paneList = listSessionPanes(name);
+    const selectedTarget = resolveSessionTarget(name, req.query.target, paneList);
+    if (req.query.target && !selectedTarget) {
+      return res.status(400).json({ error: 'Invalid pane target' });
+    }
+
+    const finalTarget = selectedTarget || name;
+    const raw = capturePaneOutput(finalTarget, 200);
     const clean = stripAnsi(raw);
-    res.json({ output: clean, raw });
+    const primaryPaneTarget = getPrimaryPaneTarget(name, paneList);
+    const panes = paneList.map(p => serializePaneForClient(p, primaryPaneTarget));
+    res.json({
+      output: clean,
+      raw,
+      selectedTarget: finalTarget,
+      primaryPaneTarget,
+      panes,
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
